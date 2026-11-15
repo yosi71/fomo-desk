@@ -1,5 +1,5 @@
 // App shell cache only. Desk data (d/...) is always fetched from the network, never cached.
-const CACHE = "desk-shell-v1";
+const CACHE = "desk-shell-v2";
 const SHELL = ["./", "index.html", "app.css", "app.js", "chart.js", "manifest.json",
                "icons/icon-192.png", "icons/apple-touch-icon.png"];
 self.addEventListener("install", e => {
