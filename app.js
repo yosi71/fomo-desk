@@ -282,6 +282,7 @@
   function renderCoin(mint) {
     const c = S.coin[mint];
     if (!c) { view.innerHTML = subNav("Coin", S.state && S.state.mode) + loading(); bindBack(); return; }
+    if (c.missing) { view.innerHTML = subNav("Coin", S.state && S.state.mode) + `<div class="empty">Nothing published for this coin yet</div>`; bindBack(); return; }
     const p = c.position, sh = c.shield || {};
     const shCls = !sh.audited ? "na" : sh.passed === sh.of ? "" : "warn";
     const chg = p ? p.sinceEntryPct : null;
@@ -352,6 +353,7 @@
   function renderAudit(mint) {
     const a = S.audit[mint];
     if (!a) { view.innerHTML = subNav("Audit") + loading(); bindBack(); return; }
+    if (a.missing) { view.innerHTML = subNav("Audit", S.state && S.state.mode) + `<div class="empty">No audit for this coin yet</div>`; bindBack(); return; }
     const sc = a.score;
     const L = a.layers || [], byN = {}; L.forEach(l => { byN[l.layer] = l; });
     view.innerHTML = subNav("Audit", S.state && S.state.mode) + `
@@ -408,8 +410,9 @@
     try {
       const [st, ch, act, bots] = await Promise.all(["state.json", "chart.json", "activity.json", "bots.json"].map(getJSON));
       Object.assign(S, { state: st, chart: ch, activity: act, bots, failing: false, loaded: true, lastOk: Date.now() });
-      if (r.name === "coin" && r.arg) S.coin[r.arg] = await getJSON(`coin/${r.arg}.json`).catch(() => S.coin[r.arg]);
-      if (r.name === "audit" && r.arg) S.audit[r.arg] = await getJSON(`audit/${r.arg}.json`).catch(() => S.audit[r.arg]);
+      const miss = (store, k) => e => (e && e.status === 404 && !(store[k] && !store[k].missing)) ? { missing: true } : store[k];
+      if (r.name === "coin" && r.arg) S.coin[r.arg] = await getJSON(`coin/${r.arg}.json`).catch(miss(S.coin, r.arg));
+      if (r.name === "audit" && r.arg) S.audit[r.arg] = await getJSON(`audit/${r.arg}.json`).catch(miss(S.audit, r.arg));
     } catch (e) {
       S.failing = true;            // keep the last good numbers on screen; the red row says what's going on
       if (S.loaded) { offlineRow(); return; }
