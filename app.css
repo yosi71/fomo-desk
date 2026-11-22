@@ -232,3 +232,11 @@ details.grp[open] summary::after{transform:rotate(90deg)}
   .odo .strip,.frame img{transition:none!important}
   .sk,.bar.work::after,.beam::after,.sheetBox{animation:none!important}
 }
+
+/* Copy picks (Account tab) */
+.pickCard .handle{font-size:20px;font-weight:600}
+.pickCard .pnl{display:flex;gap:14px;font-size:17px;font-weight:600;margin:6px 0 2px}
+.pickCard .s{font-size:15px;color:var(--secondary);margin-top:2px}
+.pickCard .ln{font-size:15px;margin-top:8px}
+.pickCard .ln a{color:var(--blue);font-weight:600}
+.pickHist .kv{font-size:15px}

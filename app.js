@@ -232,12 +232,58 @@
     $("#chips").onclick = e => { const f = e.target.dataset.f; if (f) { S.filter = f; renderActivity(); } };
   }
 
+
+  function moneyPlus(v) {
+    if (v == null) return "—";
+    return (v >= 0 ? "+" : "-") + "$" + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function mcapUsd(v) {
+    if (v == null) return "—";
+    const d = Math.abs(v) >= 100 ? 0 : 2;
+    return "$" + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+  }
+  function renderCopyPicks(st) {
+    const lists = (st.copyPicks && st.copyPicks.lists) || [];
+    const latest = lists[0];
+    let html = `<h2>Copy picks</h2>`;
+    if (!latest || !(latest.traders || []).length) {
+      html += `<div class="list"><div class="empty">No copy picks yet</div></div>`;
+      return html;
+    }
+    html += (latest.traders || []).map(t => {
+      const lb = t.lastBuy || {};
+      const buyLabel = (lb.symbol || "coin") + " at " + mcapUsd(lb.mcap);
+      let buyRow;
+      if (!(lb.symbol || lb.mint)) buyRow = `<div class="ln">last buy: none in last 25 swaps</div>`;
+      else if (lb.unknownChain) buyRow = `<div class="ln">last buy: ${esc(buyLabel)}</div>`;
+      else buyRow = `<div class="ln">${ext(lb.coinUrl, "last buy: " + buyLabel, "") || ("last buy: " + esc(buyLabel))}</div>`;
+      const buyBtn = lb.unknownChain ? ext(lb.coinUrl || st.signupLink, "Open FOMO", "btn")
+                    : ext(lb.coinUrl, "Last buy", "btn");
+      return `<div class="card pickCard">
+        <div class="handle">${esc(t.handle)}</div>
+        <div class="pnl"><span class="green">7d ${moneyPlus(t.pnl7d)}</span><span class="green">30d ${moneyPlus(t.pnl30d)}</span></div>
+        <div class="s">${esc(t.trades)} trades · last trade ${esc(t.lastTradeAgo || "—")}</div>
+        ${buyRow}
+        ${t.why ? `<div class="s">${esc(t.why)}</div>` : ""}
+        <div class="btnRow">${ext(t.profileUrl, "Profile", "btn")}${buyBtn || ""}</div>
+        <div class="ctl"><span>Copy on desk</span><span class="switch" role="switch" aria-checked="false" aria-disabled="true"></span></div>
+      </div>`;
+    }).join("");
+    html += `<h2>Last 7 lists</h2><div class="list pickHist">`;
+    html += lists.map((lst, i) => {
+      const handles = (lst.traders || []).map(x => x.handle).filter(Boolean).join(", ") || "—";
+      const when = (lst.ts ? dayLabel(lst.ts) + " · " + hhmm(lst.ts) : "—") + (i === 0 ? " · latest" : "");
+      return `<div class="kv"><span>${esc(when)}</span><span class="val">${esc(handles)}</span></div>`;
+    }).join("");
+    html += `</div>`;
+    return html;
+  }
+
   // ---------- ACCOUNT ----------
   function renderAccount(section) {
     const st = S.state, groups = st.settings || {};
     const order = ["scanner", "analyst", "social", "brain", "executor", "risk", "desk", "advanced"];
     const desk = groups.desk || [], g = k => (desk.find(x => x.key === k) || {}).value;
-    const tgNote = t => `<span class="tg">Telegram: ${esc(t)}</span>`;
     view.innerHTML = `<div class="largeTitle">Account</div>
       <div class="list">
         <div class="kv"><span>Mode</span><span class="val">${paperPill(st.mode)}</span></div>
@@ -245,8 +291,8 @@
         ${safeHref(st.profileLink) ? `<a class="kv act" href="${esc(safeHref(st.profileLink))}" target="_blank" rel="noopener noreferrer"><span>Your FOMO profile</span><span class="val">@${esc(st.handle || "")} ›</span></a>` : ""}
         <div class="kv act" id="invite"><span>Invite a friend</span><span class="val">›</span></div></div>
       <div class="note">Change via Telegram: ${st.mode === "PAPER" ? "live (type LIVE)" : "paper"}</div>
+      ${renderCopyPicks(st)}
       <div class="list">
-        <div class="kv"><span>Copy picks</span><span class="val">${tgNote("picks")}</span></div>
         <div class="kv"><span>Pushes</span><span class="val">Telegram</span></div>
         <div class="kv"><span>Send test push</span><span class="val">Telegram only</span></div>
         <div class="kv"><span>Watch in Grok Bot</span><span class="val">Telegram only</span></div></div>
