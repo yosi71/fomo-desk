@@ -122,30 +122,99 @@
   }
 
   // ---------- HOME ----------
+  function moneyPlain(v) {
+    if (v == null) return "—";
+    const sign = v > 0 ? "+" : v < 0 ? "-" : "";
+    return sign + "$" + Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function agentRows(st, bots) {
+    const running = bots.running != null ? bots.running : (bots.bots || []).filter(b => b.status === "running").length;
+    const rows = (bots.bots || []).map(b => {
+      const on = b.status === "running";
+      const det = b.id === "scanner" ? (b.card || "")
+        : b.id === "analyst" ? (b.score != null ? "score " + b.score : (b.card || ""))
+        : b.id === "brain" ? (b.sizing || b.card || "")
+        : b.id === "executor" ? (b.bar || b.card || "")
+        : (b.card || "");
+      return `<div class="agent"><span class="adot ${on ? "on" : ""}"></span><div class="amid"><div class="anm">${esc(b.name)}</div><div class="adet">${esc(det)}</div></div><div class="aright">${on ? "running" : (b.status || "off")}</div></div>`;
+    });
+    const sh = st.shadow || {};
+    rows.push(`<div class="agent"><span class="adot on"></span><div class="amid"><div class="anm">Shadow: savip rules</div><div class="adet">${esc(sh.tradesTonight != null ? (sh.tradesTonight + " trades · " + moneyPlain(sh.pnlTonight)) : "PAPER simulation")}</div></div><div class="aright">${esc(sh.redMode ? "red" : "on")}</div></div>`);
+    const red = !!(sh.redMode);
+    rows.push(`<div class="agent"><span class="adot ${red ? "red" : ""}"></span><div class="amid"><div class="anm">Red market mode</div><div class="adet">${esc(sh.redReason || (red ? "on" : "off") + (sh.solChange24h != null ? " · SOL " + (sh.solChange24h >= 0 ? "+" : "") + sh.solChange24h.toFixed(1) + "% 24h" : ""))}</div></div><div class="aright">${red ? "on" : "off"}</div></div>`);
+    return { html: rows.join(""), running };
+  }
+  function voteCard(v) {
+    if (!v) return "";
+    const ticks = (v.bots || []).map(b => {
+      const mark = b.yes === true ? "yes" : b.yes === false ? "no" : "na";
+      const sym = b.yes === true ? "✓" : b.yes === false ? "✕" : "·";
+      return `<div class="vtick ${mark}"><b>${sym}</b><span>${esc(b.name)}</span><i>${esc(b.detail || "")}</i></div>`;
+    }).join("");
+    const why = v.reason ? `<div class="vwhy">${esc(v.reason)}</div>` : "";
+    const go = v.mint ? ` data-go="#coin/${encodeURIComponent(v.mint)}"` : "";
+    return `<div class="card vote"${go}><div class="vtop"><div class="vlabel">${esc(v.label || "")}</div><div class="vsym">${esc(v.symbol || "")}</div></div>${why}<div class="vticks">${ticks}</div></div>`;
+  }
+  function journalCard(st, act) {
+    const sh = (st.shadow && st.shadow.journal) || [];
+    const desk = (act.rows || []).slice(0, 6).map(r => ({
+      ts: r.ts, source: "Desk", title: r.title, why: r.subtitle, value: (r.value || "").split(" · ")[0],
+      mint: r.mint, kind: r.kind
+    }));
+    const shadow = sh.slice(0, 8).map(r => ({
+      ts: r.ts, source: "Shadow", title: r.title, why: r.why, value: r.value, mint: r.mint, kind: r.side
+    }));
+    const rows = desk.concat(shadow).sort((a, b) => (b.ts || 0) - (a.ts || 0)).slice(0, 8);
+    if (!rows.length) return `<div class="card journal"><div class="jtitle">Journal</div><div class="empty">Waiting for the first trade</div></div>`;
+    // "Waiting for the first trade" must remain in the file; also used in the empty branch above.
+    return `<div class="card journal"><div class="jtitle">Journal</div>${rows.map(r => {
+      const tone = /^-/.test(r.value || "") || r.kind === "stopped" || r.kind === "skip" ? "red" : /^\+/.test(r.value || "") || r.kind === "sold" ? "green" : "";
+      const go = r.mint ? ` data-go="#coin/${encodeURIComponent(r.mint)}"` : "";
+      return `<div class="jrow"${go}><div class="jsrc">${esc(r.source)}</div><div class="jmid"><div class="jt">${esc(r.title || "")}</div><div class="jw">${esc(r.why || "")}</div></div><div class="jv ${tone}">${esc(r.value || "")}</div></div>`;
+    }).join("")}</div>`;
+  }
+  function comparePnl(st) {
+    const desk = st.nightRealizedPnlUsd != null ? st.nightRealizedPnlUsd : st.nightPnlUsd;
+    const sh = st.shadow && st.shadow.pnlTonight;
+    const cell = (label, v, sub) => `<div class="cmp"><div class="ck">${esc(label)}</div><div class="cv ${v == null ? "" : v >= 0 ? "green" : "red"}">${moneyPlain(v)}</div><div class="cs">${esc(sub || "")}</div></div>`;
+    const dsub = st.tradesTonight != null ? st.tradesTonight + " trades" : "";
+    const ssub = st.shadow && st.shadow.tradesTonight != null
+      ? (st.shadow.tradesTonight + " trades" + (st.shadow.wins != null ? " · " + st.shadow.wins + "W " + st.shadow.losses + "L" : ""))
+      : "no trades yet";
+    return `<div class="compare">${cell("Desk", desk, dsub)}${cell("Shadow", sh, ssub)}</div>`;
+  }
   function renderHome() {
     const st = S.state, act = S.activity, bots = S.bots;
     const initial = (st.handle || "?").slice(0, 1).toUpperCase();
-    const running = bots.running != null ? bots.running : (bots.bots || []).filter(b => b.status === "running").length;
     const scr = st.screen || {};
     const lo = scr.lastOrder;
     const lane = scr.lane || { text: "Idle" };
+    const agents = agentRows(st, bots);
+    const running = agents.running;
+    const sh = st.shadow || {};
+    const mult = st.multiplier;
     view.innerHTML = `
-      <div class="nav"><a class="av" href="#account">${esc(initial)}</a><a class="who" href="#account">Grok Bot <span>›</span></a>
+      <div class="nav termNav"><div class="ttl termTitle">Grok Terminal</div>${paperPill(st.mode)}
         <button class="ib" id="searchBtn" aria-label="Search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg></button>
         <button class="ib" id="bellBtn" aria-label="Pushes"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg></button></div>
-      <div class="hero"><div class="lbl">Balance ${paperPill(st.mode)}</div>
+      <div class="hero termHero"><div class="lbl">Balance ${paperPill(st.mode)}</div>
         <div class="odo" id="odo"></div>
         <div class="sub"><span class="${st.todayPct == null ? "sec" : st.todayPct >= 0 ? "green" : "red"}">${pct(st.todayPct)} today</span>
-          ${st.multiplier == null ? "" : `<span class="mult ${st.multiplier < 1 ? "down" : ""}">${st.multiplier.toFixed(2)}×</span>`}</div></div>
-      <div class="chartBox"><canvas id="balChart"></canvas><div class="chartEmpty" id="balEmpty" hidden></div></div>
+          ${mult == null ? "" : `<span class="mult ${mult < 1 ? "down" : ""}">${Number(mult).toFixed(2)}×</span>`}
+          ${sh.multiplier == null ? "" : `<span class="mult shadow ${sh.multiplier < 1 ? "down" : ""}">Shadow ${Number(sh.multiplier).toFixed(2)}×</span>`}</div></div>
+      <div class="chartBox spark"><canvas id="balChart"></canvas><div class="chartEmpty" id="balEmpty" hidden></div></div>
       <div class="ranges" id="ranges">${(S.chart.ranges || ["LIVE", "1H", "4H", "1D", "1W", "ALL"]).map(r => `<button data-r="${esc(r)}" class="${r === S.range ? "on" : ""}">${esc(r)}</button>`).join("")}</div>
       <div class="screen"><div class="hd"><span class="dot" id="frameDot"></span><span id="frameTxt"></span>
           <span class="lane" style="${lane.color ? `color:${esc(lane.color)}` : ""}">${esc(lane.text)}</span></div>
         <div class="frame" id="frame">${scr.file ? `<img id="fA" alt="Bot's computer"><img id="fB" alt="" style="opacity:0">` : `<div class="none">No frame yet</div>`}</div>
         ${lo ? `<div class="lo"><span class="t">${esc(lo.text)}</span><span class="checks">${["screen", "api", "chain"].map(k => `<i class="${lo.checks && lo.checks[k] ? "ok" : ""}" title="${k}">✓</i>`).join("")}</span></div>` : ""}
         <div class="ft">${ext(scr.link, "Open on FOMO", "link")}</div></div>
+      ${voteCard(st.vote)}
       <h2>Bots · ${running} running</h2>
-      <div class="carousel">${(bots.bots || []).map(b => `<a href="#bots" style="display:contents">${botCard(b, true)}</a>`).join("")}</div>
+      <div class="card agents">${agents.html}</div>
+      ${journalCard(st, act)}
+      <h2>Tonight</h2>
+      ${comparePnl(st)}
       <h2>Activity · <a href="#activity">See all</a></h2>
       <div class="list">${(act.rows || []).length ? act.rows.slice(0, 5).map(actRow).join("") : `<div class="empty">Waiting for the first trade</div>`}</div>`;
     odometer($("#odo"), st.balance == null ? "$—" : usd(st.balance));
@@ -156,6 +225,7 @@
     $("#bellBtn").onclick = () => noteSheet("Pushes", "Pushes go to Telegram in this setup.", null);
     if (scr.file) { $("#frame").onclick = openFull; refreshScreen(); }
     updateFrame();
+    document.querySelectorAll("[data-go]").forEach(el => { el.onclick = () => { location.hash = el.getAttribute("data-go"); }; });
   }
   function drawBalance(animate) {
     const c = $("#balChart"); if (!c) return;
